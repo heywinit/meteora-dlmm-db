@@ -26,19 +26,19 @@ Add the library with your favorite package manager:
 ### npm
 
 ```sh
-npm add git@github.com:GeekLad/meteora-dlmm-db
+npm add git@github.com:heywinit/meteora-dlmm-db
 ```
 
 ### yarn
 
 ```sh
-yarn add git@github.com:GeekLad/meteora-dlmm-db
+yarn add git@github.com:heywinit/meteora-dlmm-db
 ```
 
 ### bun
 
 ```sh
-bun add git@github.com:GeekLad/meteora-dlmm-db
+bun add git@github.com:heywinit/meteora-dlmm-db
 ```
 
 ### Using in a Browser
