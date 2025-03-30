@@ -1,21 +1,10 @@
 import { type Database } from "sql.js";
 import initSqlJs from "sql.js";
 import { promises as fs } from "fs";
-import path from "path";
-import MeteoraDlmmDb from "./meteora-dlmm-db";
-
-let fsPromises: any;
-async function init() {
-  if (!fsPromises) {
-    fsPromises = await import("fs/promises");
-  }
-}
 
 // Write function
 export async function writeData(data: Uint8Array): Promise<void> {
-  await init();
-
-  fsPromises.writeFileSync("./meteora-dlmm.db", data);
+  await fs.writeFile("./meteora-dlmm.db", data);
 }
 
 // Read function

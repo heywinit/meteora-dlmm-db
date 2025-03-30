@@ -245,9 +245,6 @@ function getPositionAccounts(
       (account) => account.name == "Sender" || account.name == "Owner",
     )!;
     const sender = hawksightAccount || senderAccount.pubkey.toBase58();
-    const tokenMintXAccount = accounts.find(
-      (account) => account.name == "Token X Mint",
-    );
 
     return {
       position,

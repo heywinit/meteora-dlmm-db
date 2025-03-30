@@ -32,6 +32,27 @@ export interface MeteoraDlmmDbTransactions extends MeteoraDlmmDbSchema {
     usd_deposit: number;
     usd_withdrawal: number;
 }
+export interface MeteoraDlmmDbConfig {
+    /** Path to the database file (Node.js only) */
+    dbPath?: string;
+    /** SQL.js configuration options */
+    sqlJsConfig?: {
+        locateFile?: (file: string) => string;
+        wasmBinary?: ArrayBuffer;
+        wasmBinaryFile?: string;
+    };
+    /** Whether to delay saving operations */
+    delaySave?: boolean;
+    /** Maximum number of operations in the queue before processing */
+    maxQueueSize?: number;
+}
+export declare class MeteoraDlmmError extends Error {
+    readonly cause?: unknown | undefined;
+    constructor(message: string, cause?: unknown | undefined);
+}
+export declare class MeteoraDlmmDbError extends MeteoraDlmmError {
+    constructor(message: string, cause?: unknown);
+}
 export default class MeteoraDlmmDb {
     private _db;
     private _addInstructionStatement;
@@ -44,13 +65,28 @@ export default class MeteoraDlmmDb {
     private _setOldestSignature;
     private _markCompleteStatement;
     private _getAllTransactions;
+    private _updatePositionStatement;
     private _downloaders;
     private _saving;
     private _queue;
+    private readonly _config;
     delaySave: boolean;
     private constructor();
-    static create(data?: ArrayLike<number> | Buffer | null): Promise<MeteoraDlmmDb>;
-    static load(): Promise<MeteoraDlmmDb>;
+    /**
+     * Creates a new Meteora DLMM database instance
+     * @param data Optional database data to initialize with
+     * @param config Optional configuration options
+     * @returns A new MeteoraDlmmDb instance
+     * @throws {MeteoraDlmmDbError} If database initialization fails
+     */
+    static create(data?: ArrayLike<number> | Buffer | null, config?: MeteoraDlmmDbConfig): Promise<MeteoraDlmmDb>;
+    /**
+     * Loads an existing Meteora DLMM database
+     * @param config Optional configuration options
+     * @returns A new MeteoraDlmmDb instance
+     * @throws {MeteoraDlmmDbError} If database loading fails
+     */
+    static load(config?: MeteoraDlmmDbConfig): Promise<MeteoraDlmmDb>;
     private _init;
     private _createTables;
     private _createStatements;
@@ -75,6 +111,10 @@ export default class MeteoraDlmmDb {
     private _getAll;
     private _queueDbCall;
     private _processQueue;
+    /**
+     * Saves the current database state
+     * @throws {MeteoraDlmmDbError} If saving fails
+     */
     save(): Promise<void>;
     private _waitUntilReady;
     waitForSave(): Promise<void>;

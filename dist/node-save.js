@@ -1,39 +1,34 @@
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
 };
-import MeteoraDlmmDb from "./meteora-dlmm-db";
-let fs;
-function init() {
-    return __awaiter(this, void 0, void 0, function* () {
-        if (!fs) {
-            fs = yield import("fs");
-        }
-    });
-}
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.writeData = writeData;
+exports.readData = readData;
+exports.saveData = saveData;
+const sql_js_1 = __importDefault(require("sql.js"));
+const fs_1 = require("fs");
 // Write function
-export function writeData(data) {
-    return __awaiter(this, void 0, void 0, function* () {
-        yield init();
-        fs.writeFileSync("./meteora-dlmm.db", data);
-    });
+async function writeData(data) {
+    await fs_1.promises.writeFile("./meteora-dlmm.db", data);
 }
 // Read function
-export function readData() {
-    return __awaiter(this, void 0, void 0, function* () {
-        yield init();
-        try {
-            const data = fs.readFileSync("./meteora-dlmm.db");
-            return MeteoraDlmmDb.create(data);
+async function readData(config = {}) {
+    const dbPath = config.dbPath ?? "meteora-dlmm.db";
+    try {
+        const data = await fs_1.promises.readFile(dbPath);
+        const SQL = await (0, sql_js_1.default)();
+        return new SQL.Database(data);
+    }
+    catch (error) {
+        if (error.code === "ENOENT") {
+            return null;
         }
-        catch (err) {
-            return MeteoraDlmmDb.create();
-        }
-    });
+        throw error;
+    }
+}
+async function saveData(db, dbPath) {
+    const data = db.export();
+    await fs_1.promises.writeFile(dbPath, Buffer.from(data));
 }
 //# sourceMappingURL=node-save.js.map

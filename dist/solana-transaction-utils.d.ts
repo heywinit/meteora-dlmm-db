@@ -31,6 +31,7 @@ interface ParsedTransactionStreamConfig extends MeteoraDownloaderConfig {
     mostRecentSignature?: string;
     oldestSignature?: string;
     oldestDate?: Date;
+    endDate?: Date;
 }
 export declare class ParsedTransactionStream {
     private _account;
@@ -39,6 +40,7 @@ export declare class ParsedTransactionStream {
     private _mostRecentSignature?;
     private _oldestSignature?;
     private _oldestDate?;
+    private _endDate?;
     private _currentSignatures;
     private _chunkSize;
     private static _apiThrottle;
@@ -57,6 +59,7 @@ export declare class ParsedTransactionStream {
     private get _continue();
     private get _hasMostRecentSignature();
     private get _hasOldestDate();
+    private get _hasEndDate();
     private get _before();
 }
 export {};

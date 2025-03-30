@@ -1,6 +1,11 @@
-import { LBCLMM_PROGRAM_IDS } from "@meteora-ag/dlmm";
-export const HAWKSIGHT_PROGRAM_ID = "FqGg2Y1FNxMiGd51Q6UETixQWkF5fB92MysbYogRJb3P";
-export function getHawksightAccount(transaction) {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.HAWKSIGHT_PROGRAM_ID = void 0;
+exports.getHawksightAccount = getHawksightAccount;
+exports.getHawksightTokenTransfers = getHawksightTokenTransfers;
+const dlmm_1 = require("@meteora-ag/dlmm");
+exports.HAWKSIGHT_PROGRAM_ID = "FqGg2Y1FNxMiGd51Q6UETixQWkF5fB92MysbYogRJb3P";
+function getHawksightAccount(transaction) {
     if (transaction == null) {
         return null;
     }
@@ -25,18 +30,17 @@ export function getHawksightAccount(transaction) {
     }
     return null;
 }
-export function getHawksightTokenTransfers(transaction, meteoraInstruction, index) {
-    var _a, _b;
+function getHawksightTokenTransfers(transaction, meteoraInstruction, index) {
     if (index == -1) {
         return [];
     }
-    const hawksightInstruction = (_b = (_a = transaction.meta) === null || _a === void 0 ? void 0 : _a.innerInstructions) === null || _b === void 0 ? void 0 : _b.find((i) => i.index == index);
+    const hawksightInstruction = transaction.meta?.innerInstructions?.find((i) => i.index == index);
     if (hawksightInstruction == undefined) {
         return [];
     }
     const meteoraInstructionIndex = hawksightInstruction.instructions.indexOf(meteoraInstruction);
     const nextMeteoraInstructionIndex = hawksightInstruction.instructions
-        .filter((i, index) => i.programId.toBase58() == LBCLMM_PROGRAM_IDS["mainnet-beta"] &&
+        .filter((i, index) => i.programId.toBase58() == dlmm_1.LBCLMM_PROGRAM_IDS["mainnet-beta"] &&
         index > meteoraInstructionIndex + 1)
         .map((i) => hawksightInstruction.instructions.indexOf(i))[0];
     const transfers = hawksightInstruction.instructions.filter((i, index) => "program" in i &&

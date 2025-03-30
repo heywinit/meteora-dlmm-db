@@ -1,3 +1,3 @@
-import MeteoraDlmmDb from "./meteora-dlmm-db";
-export declare function writeData(data: Uint8Array): Promise<void>;
-export declare function readData(): Promise<MeteoraDlmmDb>;
+import { type Database } from "sql.js";
+export declare function readData(): Promise<Database | null>;
+export declare function saveData(db: Database): Promise<void>;

@@ -1,57 +1,22 @@
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
 };
-import MeteoraDlmmDb from "./meteora-dlmm-db";
-import { delay } from "./util";
-let Dexie;
-let db;
-let table;
-let saving = false;
-let newData;
-function init() {
-    return __awaiter(this, void 0, void 0, function* () {
-        if (!Dexie) {
-            const dexie = yield import("dexie");
-            Dexie = dexie.Dexie;
-        }
-        if (!db) {
-            db = new Dexie("meteora-dlmm-db");
-            db.version(1).stores({
-                db: "id",
-            });
-            table = db.table("db");
-        }
-    });
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.readData = readData;
+exports.saveData = saveData;
+const sql_js_1 = __importDefault(require("sql.js"));
+const STORAGE_KEY = "meteora-dlmm-db";
+async function readData() {
+    const data = localStorage.getItem(STORAGE_KEY);
+    if (!data) {
+        return null;
+    }
+    const SQL = await (0, sql_js_1.default)();
+    return new SQL.Database(JSON.parse(data));
 }
-// Write function
-export function writeData(data) {
-    return __awaiter(this, void 0, void 0, function* () {
-        if (saving) {
-            newData = data;
-            return;
-        }
-        saving = true;
-        newData = data;
-        yield init();
-        yield table.put({ id: 1, data: newData });
-        saving = false;
-    });
-}
-// Read function
-export function readData() {
-    return __awaiter(this, void 0, void 0, function* () {
-        while (saving) {
-            yield delay(50);
-        }
-        yield init();
-        const record = yield table.get(1);
-        return MeteoraDlmmDb.create(record === null || record === void 0 ? void 0 : record.data);
-    });
+async function saveData(db) {
+    const data = db.export();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 }
 //# sourceMappingURL=browser-save.js.map

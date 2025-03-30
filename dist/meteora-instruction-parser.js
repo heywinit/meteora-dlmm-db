@@ -1,8 +1,12 @@
-import { IDL, LBCLMM_PROGRAM_IDS } from "@meteora-ag/dlmm";
-import { BorshEventCoder, BorshInstructionCoder, } from "@project-serum/anchor";
-import { base64, bs58 } from "@project-serum/anchor/dist/cjs/utils/bytes";
-import { getInstructionIndex, getAccountMetas, getTokenTransfers, } from "./solana-transaction-utils";
-import { getHawksightAccount, getHawksightTokenTransfers, } from "./hawksight-parser";
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.sortMeteoraInstructions = sortMeteoraInstructions;
+exports.parseMeteoraInstructions = parseMeteoraInstructions;
+const dlmm_1 = require("@meteora-ag/dlmm");
+const anchor_1 = require("@project-serum/anchor");
+const bytes_1 = require("@project-serum/anchor/dist/cjs/utils/bytes");
+const solana_transaction_utils_1 = require("./solana-transaction-utils");
+const hawksight_parser_1 = require("./hawksight-parser");
 const INSTRUCTION_MAP = new Map([
     ["initializePosition", "open"],
     ["addLiquidity", "add"],
@@ -18,9 +22,9 @@ const INSTRUCTION_MAP = new Map([
     ["claimFee", "claim"],
     ["closePosition", "close"],
 ]);
-const INSTRUCTION_CODER = new BorshInstructionCoder(IDL);
-let EVENT_CODER = new BorshEventCoder(IDL);
-export function sortMeteoraInstructions(instructions) {
+const INSTRUCTION_CODER = new anchor_1.BorshInstructionCoder(dlmm_1.IDL);
+let EVENT_CODER = new anchor_1.BorshEventCoder(dlmm_1.IDL);
+function sortMeteoraInstructions(instructions) {
     return instructions.sort((a, b) => {
         return a.blockTime != b.blockTime
             ? // If they're different block times, take them in ascending order
@@ -47,14 +51,13 @@ export function sortMeteoraInstructions(instructions) {
                                                                 0;
     });
 }
-export function parseMeteoraInstructions(transaction) {
-    var _a;
+function parseMeteoraInstructions(transaction) {
     if (transaction == null) {
         return [];
     }
-    const hawksightAccount = getHawksightAccount(transaction);
+    const hawksightAccount = (0, hawksight_parser_1.getHawksightAccount)(transaction);
     const parsedInstructions = transaction.transaction.message.instructions.map((instruction) => parseMeteoraInstruction(transaction, instruction, hawksightAccount));
-    if ((_a = transaction.meta) === null || _a === void 0 ? void 0 : _a.innerInstructions) {
+    if (transaction.meta?.innerInstructions) {
         const innerInstructions = transaction.meta.innerInstructions
             .map((instruction) => instruction.instructions)
             .flat()
@@ -66,7 +69,7 @@ export function parseMeteoraInstructions(transaction) {
     return parsedInstructions.filter((instruction) => instruction !== null);
 }
 function parseMeteoraInstruction(transaction, instruction, hawksightAccount) {
-    if (instruction.programId.toBase58() == LBCLMM_PROGRAM_IDS["mainnet-beta"]) {
+    if (instruction.programId.toBase58() == dlmm_1.LBCLMM_PROGRAM_IDS["mainnet-beta"]) {
         try {
             if ("data" in instruction) {
                 return getMeteoraInstructionData(transaction, instruction, hawksightAccount);
@@ -88,17 +91,17 @@ function getMeteoraInstructionData(transaction, instruction, hawksightAccount) {
         // Unknown instruction
         return null;
     }
-    const index = getInstructionIndex(transaction, instruction);
+    const index = (0, solana_transaction_utils_1.getInstructionIndex)(transaction, instruction);
     if (index == -1) {
         return null;
     }
     const instructionName = decodedInstruction.name;
     const instructionType = INSTRUCTION_MAP.get(decodedInstruction.name);
-    const accountMetas = getAccountMetas(transaction, instruction);
+    const accountMetas = (0, solana_transaction_utils_1.getAccountMetas)(transaction, instruction);
     const accounts = getPositionAccounts(decodedInstruction, accountMetas, hawksightAccount);
     const tokenTransfers = !hawksightAccount
-        ? getTokenTransfers(transaction, index)
-        : getHawksightTokenTransfers(transaction, instruction, index);
+        ? (0, solana_transaction_utils_1.getTokenTransfers)(transaction, index)
+        : (0, hawksight_parser_1.getHawksightTokenTransfers)(transaction, instruction, index);
     const activeBinId = tokenTransfers.length > 0 ? getActiveBinId(transaction, index) : null;
     const removalBps = instructionType == "remove" ? getRemovalBps(decodedInstruction) : null;
     return {
@@ -123,7 +126,6 @@ function getPositionAccounts(decodedInstruction, accountMetas, hawksightAccount)
         const lbPair = lbPairAccount.pubkey.toBase58();
         const senderAccount = accounts.find((account) => account.name == "Sender" || account.name == "Owner");
         const sender = hawksightAccount || senderAccount.pubkey.toBase58();
-        const tokenMintXAccount = accounts.find((account) => account.name == "Token X Mint");
         return {
             position,
             lbPair,
@@ -164,11 +166,11 @@ function getActiveBinId(transaction, index) {
         if (parsedInnerInstruction && parsedInnerInstruction.instructions) {
             const instructions = parsedInnerInstruction.instructions;
             const meteoraInstructions = instructions.filter((instruction) => instruction.programId.toBase58() ==
-                LBCLMM_PROGRAM_IDS["mainnet-beta"]);
+                dlmm_1.LBCLMM_PROGRAM_IDS["mainnet-beta"]);
             const events = meteoraInstructions.map((instruction) => {
-                const ixData = bs58.decode(instruction.data);
+                const ixData = bytes_1.bs58.decode(instruction.data);
                 // @ts-ignore
-                const eventData = base64.encode(ixData.subarray(8));
+                const eventData = bytes_1.base64.encode(ixData.subarray(8));
                 return EVENT_CODER.decode(eventData);
             });
             const eventWithActiveBinId = events.find((event) => event && "activeBinId" in event.data);
