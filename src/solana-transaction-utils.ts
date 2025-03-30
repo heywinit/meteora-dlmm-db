@@ -134,6 +134,7 @@ interface ParsedTransactionStreamConfig extends MeteoraDownloaderConfig {
   mostRecentSignature?: string;
   oldestSignature?: string;
   oldestDate?: Date;
+  endDate?: Date;
 }
 
 export class ParsedTransactionStream {
@@ -143,6 +144,7 @@ export class ParsedTransactionStream {
   private _mostRecentSignature?: string;
   private _oldestSignature?: string;
   private _oldestDate?: Date;
+  private _endDate?: Date;
   private _currentSignatures: ConfirmedSignatureInfo[] = [];
   private _chunkSize: number;
   private static _apiThrottle: ApiThrottle;
@@ -164,6 +166,7 @@ export class ParsedTransactionStream {
     this._mostRecentSignature = config?.mostRecentSignature;
     this._oldestSignature = config?.oldestSignature;
     this._oldestDate = config?.oldestDate;
+    this._endDate = config?.endDate;
     this._chunkSize = config?.chunkSize || CHUNK_SIZE;
     if (!ParsedTransactionStream._apiThrottle) {
       ParsedTransactionStream._apiThrottle = new ApiThrottle(
@@ -235,15 +238,23 @@ export class ParsedTransactionStream {
         .filter((signature) => !signature.err);
     }
 
-    if (this._hasOldestDate) {
-      return this._currentSignatures.filter(
-        (signature) =>
-          !signature.err &&
-          new Date(signature.blockTime! * 1000) >= this._oldestDate!,
+    // If we have an end date and any signature is after it, we should stop fetching more
+    if (this._endDate) {
+      const hasFutureSignatures = this._currentSignatures.some(
+        (signature) => new Date(signature.blockTime! * 1000) > this._endDate!
       );
+      if (hasFutureSignatures) {
+        this._cancelled = true;
+      }
     }
 
-    return this._currentSignatures.filter((signature) => !signature.err);
+    return this._currentSignatures.filter((signature) => {
+      if (signature.err) return false;
+      const signatureDate = new Date(signature.blockTime! * 1000);
+      if (this._oldestDate && signatureDate < this._oldestDate) return false;
+      if (this._endDate && signatureDate > this._endDate) return false;
+      return true;
+    });
   }
 
   private async _sendParsedTransactions(
@@ -284,7 +295,8 @@ export class ParsedTransactionStream {
     if (
       this._currentSignatures.length == 0 ||
       this._cancelled ||
-      this._hasOldestDate
+      this._hasOldestDate ||
+      this._hasEndDate
     ) {
       return false;
     }
@@ -313,6 +325,22 @@ export class ParsedTransactionStream {
           new Date(signature.blockTime! * 1000) < this._oldestDate!,
       )
     );
+  }
+
+  private get _hasEndDate(): boolean {
+    if (!this._endDate) return false;
+    
+    // Check if any signature in the current batch is after the end date
+    const hasFutureSignatures = this._currentSignatures.some(
+      (signature) => new Date(signature.blockTime! * 1000) > this._endDate!
+    );
+    
+    // If we have future signatures, we should stop fetching more
+    if (hasFutureSignatures) {
+      this._cancelled = true;
+    }
+    
+    return hasFutureSignatures;
   }
 
   private get _before(): string | undefined {

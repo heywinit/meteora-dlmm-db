@@ -28,6 +28,8 @@ export interface MeteoraDlmmDownloaderStats {
 export interface MeteoraDownloaderConfig extends ConnectionConfig {
   endpoint: string;
   account: string;
+  startDate?: Date;
+  endDate?: Date;
   callbacks?: {
     onDone?: (...args: any[]) => any;
     onSignaturesReceived?: (signatures: ConfirmedSignatureInfo[]) => any;
@@ -152,11 +154,12 @@ export default class MeteoraDownloader {
     this._isComplete = await this._db.isComplete(this._account);
     this._stream = ParsedTransactionStream.stream({
       ...config,
-      oldestDate: new Date("11/06/2023"),
+      oldestDate: config.startDate || new Date("11/06/2023"),
+      endDate: config.endDate || new Date(),
+      mostRecentSignature: await this._db.getMostRecentSignature(this._account),
       oldestSignature: !this._isComplete
         ? await this._db.getOldestSignature(this._account)
         : undefined,
-      mostRecentSignature: await this._db.getMostRecentSignature(this._account),
       onSignaturesReceived: (signatures) =>
         this._onNewSignaturesReceived(signatures),
       onParsedTransactionsReceived: (transactions) =>
