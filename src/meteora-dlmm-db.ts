@@ -90,6 +90,7 @@ export default class MeteoraDlmmDb {
   private _setOldestSignature!: Statement;
   private _markCompleteStatement!: Statement;
   private _getAllTransactions!: Statement;
+  private _updatePositionStatement!: Statement;
   private _downloaders: Map<string, MeteoraDlmmDownloader> = new Map();
   private _saving = false;
   private _queue: (() => any)[] = [];
@@ -98,7 +99,7 @@ export default class MeteoraDlmmDb {
   private constructor() {}
 
   static async create(
-    data?: ArrayLike<number> | Buffer | null,
+    data?: ArrayLike<number> | Buffer | null
   ): Promise<MeteoraDlmmDb> {
     const db = new MeteoraDlmmDb();
     await db._init(data);
@@ -155,6 +156,19 @@ export default class MeteoraDlmmDb {
       CREATE INDEX IF NOT EXISTS instructions_position_address ON instructions (position_address);
       CREATE INDEX IF NOT EXISTS instructions_block_time ON instructions (block_time);
       CREATE INDEX IF NOT EXISTS instructions_signature ON instructions (signature);
+
+      -----------------
+      -- Positions --
+      -----------------
+      CREATE TABLE IF NOT EXISTS positions (
+        position_address TEXT NOT NULL,
+        owner_address TEXT NOT NULL,
+        pair_address TEXT NOT NULL,
+        is_open INTEGER NOT NULL,
+        CONSTRAINT positions_position_address PRIMARY KEY (position_address)
+      );
+      CREATE INDEX IF NOT EXISTS positions_owner_address ON positions (owner_address);
+      CREATE INDEX IF NOT EXISTS positions_pair_address ON positions (pair_address);
 
       ---------------------
       -- Token Transfers --
@@ -667,6 +681,26 @@ export default class MeteoraDlmmDb {
       )
       ON CONFLICT DO NOTHING
     `);
+
+    this._updatePositionStatement = this._db.prepare(`
+      INSERT INTO positions (
+        position_address,
+        owner_address,
+        pair_address,
+        is_open
+      )
+      VALUES (
+        $position_address,
+        $owner_address,
+        $pair_address,
+        $is_open
+      )
+      ON CONFLICT(position_address) DO UPDATE SET
+        owner_address = $owner_address,
+        pair_address = $pair_address,
+        is_open = $is_open
+    `);
+
     this._addTransferStatement = this._db.prepare(`
       INSERT INTO token_transfers(
         signature,
@@ -870,6 +904,16 @@ export default class MeteoraDlmmDb {
         lbPair: $pair_address,
         sender: $owner_address,
       } = accounts;
+
+      // Update positions table
+      const $is_open = $instruction_type === "close" ? 0 : 1;
+      this._updatePositionStatement.run({
+        $position_address,
+        $owner_address,
+        $pair_address,
+        $is_open,
+      });
+
       this._addInstructionStatement.run({
         $signature,
         $slot,
@@ -950,7 +994,7 @@ export default class MeteoraDlmmDb {
 
   async addUsdTransactions(
     position_address: string,
-    transactions: MeteoraPositionTransactions,
+    transactions: MeteoraPositionTransactions
   ) {
     await this._queueDbCall(() => {
       const $position_address = position_address;
@@ -1023,7 +1067,7 @@ export default class MeteoraDlmmDb {
   async setOldestSignature(
     $account_address: string,
     $oldest_block_time: number,
-    $oldest_signature: string,
+    $oldest_signature: string
   ) {
     await this._queueDbCall(() => {
       this._setOldestSignature.run({
@@ -1052,7 +1096,7 @@ export default class MeteoraDlmmDb {
       WHERE
         account_address = '${account_address}'
         AND completed
-    `,
+    `
         )
         .map((result) => result.values)
         .flat()
@@ -1093,7 +1137,7 @@ export default class MeteoraDlmmDb {
   }
 
   async getMostRecentSignature(
-    owner_address: string,
+    owner_address: string
   ): Promise<string | undefined> {
     return await this._queueDbCall(() => {
       const signature = this._db
@@ -1108,7 +1152,7 @@ export default class MeteoraDlmmDb {
         ORDER BY
           block_time DESC
         LIMIT 1        
-      `,
+      `
         )
         .map((result) => result.values)
         .flat()
@@ -1148,7 +1192,7 @@ export default class MeteoraDlmmDb {
           ORDER BY
             block_time 
           LIMIT 1    
-      `,
+      `
         )
         .map((result) => result.values)
         .flat()
@@ -1166,11 +1210,11 @@ export default class MeteoraDlmmDb {
   }
 
   async getOwnerTransactions(
-    owner_address: string,
+    owner_address: string
   ): Promise<MeteoraDlmmDbTransactions[]> {
     return this._queueDbCall(() => {
       const result = this._db.exec(
-        `SELECT * FROM v_transactions where owner_address = '${owner_address}'`,
+        `SELECT * FROM v_transactions where owner_address = '${owner_address}'`
       );
       const columns = result[0].columns;
       return result[0].values.map((row) => {
@@ -1188,7 +1232,7 @@ export default class MeteoraDlmmDb {
   }
 
   private async _getAll<MeteoraDlmmDbSchema>(
-    statement: Statement,
+    statement: Statement
   ): Promise<MeteoraDlmmDbSchema[]> {
     return await this._queueDbCall(() => {
       const output: MeteoraDlmmDbSchema[] = [];
