@@ -172,6 +172,7 @@ export class MeteoraDlmmApi {
       const pairData = await extractPairData(pair);
       return pairData;
     } catch (err) {
+      console.error(err);
       throw new Error(`Meteora DLMM pair with address ${lbPair} was not found`);
     }
   }
