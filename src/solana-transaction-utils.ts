@@ -3,7 +3,6 @@ import {
   PublicKey,
   type AccountMeta,
   type ConfirmedSignatureInfo,
-  type ConnectionConfig,
   type ParsedInstruction,
   type ParsedTransactionWithMeta,
   type PartiallyDecodedInstruction,

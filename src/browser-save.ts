@@ -1,47 +1,18 @@
-import MeteoraDlmmDb from "./meteora-dlmm-db";
-import { delay } from "./util";
+import { type Database } from "sql.js";
+import initSqlJs from "sql.js";
 
-let Dexie: any;
-let db: any;
-let table: any;
-let saving = false;
-let newData: Uint8Array;
+const STORAGE_KEY = "meteora-dlmm-db";
 
-async function init() {
-  if (!Dexie) {
-    const dexie = await import("dexie");
-    Dexie = dexie.Dexie;
+export async function readData(): Promise<Database | null> {
+  const data = localStorage.getItem(STORAGE_KEY);
+  if (!data) {
+    return null;
   }
-  if (!db) {
-    db = new Dexie("meteora-dlmm-db");
-    db.version(1).stores({
-      db: "id",
-    });
-    table = db.table("db");
-  }
+  const SQL = await initSqlJs();
+  return new SQL.Database(JSON.parse(data));
 }
 
-// Write function
-export async function writeData(data: Uint8Array): Promise<void> {
-  if (saving) {
-    newData = data;
-    return;
-  }
-  saving = true;
-  newData = data;
-  await init();
-
-  await table.put({ id: 1, data: newData });
-  saving = false;
-}
-
-// Read function
-export async function readData(): Promise<MeteoraDlmmDb> {
-  while (saving) {
-    await delay(50);
-  }
-  await init();
-  const record = await table.get(1);
-
-  return MeteoraDlmmDb.create(record?.data);
+export async function saveData(db: Database): Promise<void> {
+  const data = db.export();
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 }

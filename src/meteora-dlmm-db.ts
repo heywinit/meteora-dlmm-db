@@ -48,6 +48,35 @@ export interface MeteoraDlmmDbTransactions extends MeteoraDlmmDbSchema {
   usd_withdrawal: number;
 }
 
+export interface MeteoraDlmmDbConfig {
+  /** Path to the database file (Node.js only) */
+  dbPath?: string;
+  /** SQL.js configuration options */
+  sqlJsConfig?: {
+    locateFile?: (file: string) => string;
+    wasmBinary?: ArrayBuffer;
+    wasmBinaryFile?: string;
+  };
+  /** Whether to delay saving operations */
+  delaySave?: boolean;
+  /** Maximum number of operations in the queue before processing */
+  maxQueueSize?: number;
+}
+
+export class MeteoraDlmmError extends Error {
+  constructor(message: string, public readonly cause?: unknown) {
+    super(message);
+    this.name = "MeteoraDlmmError";
+  }
+}
+
+export class MeteoraDlmmDbError extends MeteoraDlmmError {
+  constructor(message: string, cause?: unknown) {
+    super(message, cause);
+    this.name = "MeteoraDlmmDbError";
+  }
+}
+
 function isBrowser() {
   // Check for browser window
   if (typeof window !== "undefined" && typeof window.document !== "undefined") {
@@ -94,33 +123,74 @@ export default class MeteoraDlmmDb {
   private _downloaders: Map<string, MeteoraDlmmDownloader> = new Map();
   private _saving = false;
   private _queue: (() => any)[] = [];
+  private readonly _config: Required<MeteoraDlmmDbConfig>;
   delaySave = false;
 
-  private constructor() {}
-
-  static async create(
-    data?: ArrayLike<number> | Buffer | null
-  ): Promise<MeteoraDlmmDb> {
-    const db = new MeteoraDlmmDb();
-    await db._init(data);
-    return db;
+  private constructor(config: MeteoraDlmmDbConfig = {}) {
+    this._config = {
+      dbPath: config.dbPath ?? "meteora-dlmm.db",
+      sqlJsConfig: config.sqlJsConfig ?? {},
+      delaySave: config.delaySave ?? false,
+      maxQueueSize: config.maxQueueSize ?? 1000,
+    };
+    this.delaySave = this._config.delaySave;
   }
 
-  static async load(): Promise<MeteoraDlmmDb> {
-    const { readData } = isBrowser()
-      ? await import("./browser-save")
-      : await import("./node-save");
-    return readData();
+  /**
+   * Creates a new Meteora DLMM database instance
+   * @param data Optional database data to initialize with
+   * @param config Optional configuration options
+   * @returns A new MeteoraDlmmDb instance
+   * @throws {MeteoraDlmmDbError} If database initialization fails
+   */
+  static async create(
+    data?: ArrayLike<number> | Buffer | null,
+    config?: MeteoraDlmmDbConfig
+  ): Promise<MeteoraDlmmDb> {
+    try {
+      const db = new MeteoraDlmmDb(config);
+      await db._init(data);
+      return db;
+    } catch (error) {
+      throw new MeteoraDlmmDbError("Failed to create database", error);
+    }
+  }
+
+  /**
+   * Loads an existing Meteora DLMM database
+   * @param config Optional configuration options
+   * @returns A new MeteoraDlmmDb instance
+   * @throws {MeteoraDlmmDbError} If database loading fails
+   */
+  static async load(config?: MeteoraDlmmDbConfig): Promise<MeteoraDlmmDb> {
+    try {
+      const { readData } = isBrowser()
+        ? await import("./browser-save")
+        : await import("./node-save");
+      const dbData = await readData(config);
+      if (!dbData) {
+        throw new MeteoraDlmmDbError("Failed to load database");
+      }
+      const db = new MeteoraDlmmDb(config);
+      await db._init(dbData.export());
+      return db;
+    } catch (error) {
+      throw new MeteoraDlmmDbError("Failed to load database", error);
+    }
   }
 
   private async _init(data?: ArrayLike<number> | Buffer | null) {
-    const sql = await initSql();
-    this._db = new sql.Database(data);
-    this._createTables();
-    if (!data) {
-      this._addInitialData();
+    try {
+      const sql = await initSql();
+      this._db = new sql.Database(data);
+      this._createTables();
+      if (!data) {
+        this._addInitialData();
+      }
+      this._createStatements();
+    } catch (error) {
+      throw new MeteoraDlmmDbError("Failed to initialize database", error);
     }
-    this._createStatements();
   }
 
   private _createTables() {
@@ -1258,34 +1328,38 @@ export default class MeteoraDlmmDb {
   }
 
   private async _processQueue() {
-    if (this._saving || this._queue.length == 0) {
+    if (this._saving || this._queue.length === 0) {
       return;
     }
+
     this._saving = true;
-    while (this._queue.length > 0) {
-      const fn = this._queue.shift();
-      if (fn) {
-        fn();
+    try {
+      while (this._queue.length > 0) {
+        const fn = this._queue.shift();
+        if (!fn) break;
+        await fn();
       }
+    } catch (error) {
+      throw new MeteoraDlmmDbError("Failed to process database queue", error);
+    } finally {
+      this._saving = false;
     }
-    await this.save();
-    this._saving = false;
-    this._processQueue();
   }
 
+  /**
+   * Saves the current database state
+   * @throws {MeteoraDlmmDbError} If saving fails
+   */
   async save(): Promise<void> {
-    this._saving = true;
-    if (this.delaySave) {
+    try {
       await this._waitUntilReady();
+      const { saveData } = isBrowser()
+        ? await import("./browser-save")
+        : await import("./node-save");
+      await saveData(this._db, this._config.dbPath);
+    } catch (error) {
+      throw new MeteoraDlmmDbError("Failed to save database", error);
     }
-    const data = this._db.export();
-    this._db.close();
-    await this._init(data);
-
-    const { writeData } = isBrowser()
-      ? await import("./browser-save")
-      : await import("./node-save");
-    await writeData(data);
   }
 
   private async _waitUntilReady() {
