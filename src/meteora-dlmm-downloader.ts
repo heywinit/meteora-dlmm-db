@@ -30,6 +30,13 @@ export interface MeteoraDownloaderConfig extends ConnectionConfig {
   account: string;
   callbacks?: {
     onDone?: (...args: any[]) => any;
+    onSignaturesReceived?: (signatures: ConfirmedSignatureInfo[]) => any;
+    onInstructionsLoaded?: (count: number, elapsed: number) => any;
+    onMissingPairsFetched?: (address: string, pair: any) => any;
+    onMissingTokensFetched?: (address: string, token: TokenMeta) => any;
+    onUsdTransactionsFetched?: (address: string, count: number) => any;
+    onCancelled?: (fullyCancelled: boolean) => any;
+    onProgress?: (stats: MeteoraDlmmDownloaderStats) => any;
   };
   chunkSize?: number;
   throttleParameters?: {
@@ -72,6 +79,13 @@ export default class MeteoraDownloader {
   private _fullyCancelled = false;
   private _oldestSignature: string = "";
   private _oldestBlocktime: number = 0;
+  private _onSignaturesReceived?: (signatures: ConfirmedSignatureInfo[]) => any;
+  private _onInstructionsLoaded?: (count: number, elapsed: number) => any;
+  private _onMissingPairsFetched?: (address: string, pair: any) => any;
+  private _onMissingTokensFetched?: (address: string, token: TokenMeta) => any;
+  private _onUsdTransactionsFetched?: (address: string, count: number) => any;
+  private _onCancelled?: (fullyCancelled: boolean) => any;
+  private _onProgress?: (stats: MeteoraDlmmDownloaderStats) => any;
 
   get downloadComplete(): boolean {
     return this.positionsComplete && !this._fetchingUsd;
@@ -90,6 +104,13 @@ export default class MeteoraDownloader {
     this._connection = new Connection(config.endpoint, config);
     this._db = db;
     this._onDone = config.callbacks?.onDone;
+    this._onSignaturesReceived = config.callbacks?.onSignaturesReceived;
+    this._onInstructionsLoaded = config.callbacks?.onInstructionsLoaded;
+    this._onMissingPairsFetched = config.callbacks?.onMissingPairsFetched;
+    this._onMissingTokensFetched = config.callbacks?.onMissingTokensFetched;
+    this._onUsdTransactionsFetched = config.callbacks?.onUsdTransactionsFetched;
+    this._onCancelled = config.callbacks?.onCancelled;
+    this._onProgress = config.callbacks?.onProgress;
     this._startTime = Date.now();
     this._init(config);
   }
@@ -102,12 +123,12 @@ export default class MeteoraDownloader {
       const signatureMatch = config.account.match(/\w+$/);
       if (!signatureMatch || signatureMatch?.length == 0) {
         throw new Error(
-          `${config.account} is not a valid account or transaction signature`,
+          `${config.account} is not a valid account or transaction signature`
         );
       }
       const signature = signatureMatch[0];
       const parsedTransaction = await this._connection.getParsedTransaction(
-        signature,
+        signature
       );
       const instructions = parseMeteoraInstructions(parsedTransaction);
       if (instructions.length == 0) {
@@ -119,12 +140,12 @@ export default class MeteoraDownloader {
     if (config.throttleParameters) {
       if (config.throttleParameters.meteoraDlmm) {
         MeteoraDlmmApi.updateThrottleParameters(
-          config.throttleParameters.meteoraDlmm,
+          config.throttleParameters.meteoraDlmm
         );
       }
       if (config.throttleParameters.jupiterTokenList) {
         JupiterTokenListApi.updateThrottleParameters(
-          config.throttleParameters.jupiterTokenList,
+          config.throttleParameters.jupiterTokenList
         );
       }
     }
@@ -163,8 +184,15 @@ export default class MeteoraDownloader {
     };
   }
 
+  private async _notifyProgress() {
+    if (this._onProgress) {
+      const stats = await this.stats();
+      this._onProgress(stats);
+    }
+  }
+
   private async _loadInstructions(
-    transactions: (ParsedTransactionWithMeta | null)[],
+    transactions: (ParsedTransactionWithMeta | null)[]
   ) {
     if (this._transactionDownloadCancelled) {
       return this._fetchUsd();
@@ -184,6 +212,10 @@ export default class MeteoraDownloader {
     });
     const elapsed = Date.now() - start;
     console.log(`Downloaded ${instructionCount} instructions in ${elapsed}ms`);
+    if (this._onInstructionsLoaded) {
+      this._onInstructionsLoaded(instructionCount, elapsed);
+    }
+    await this._notifyProgress();
     this._fetchMissingPairs();
   }
 
@@ -192,7 +224,7 @@ export default class MeteoraDownloader {
       await this._db.setOldestSignature(
         this._account,
         this._oldestBlocktime,
-        this._oldestSignature,
+        this._oldestSignature
       );
     }
     this._accountSignatureCount += signatures.length;
@@ -206,8 +238,12 @@ export default class MeteoraDownloader {
     console.log(
       `${elapsed}s - ${
         newest ? `Newest transaction: ${newest}, ` : ""
-      }Oldest transaction (${oldestDate}): ${this._oldestSignature}`,
+      }Oldest transaction (${oldestDate}): ${this._oldestSignature}`
     );
+    if (this._onSignaturesReceived) {
+      this._onSignaturesReceived(signatures);
+    }
+    await this._notifyProgress();
   }
 
   private async _fetchMissingPairs() {
@@ -226,6 +262,10 @@ export default class MeteoraDownloader {
           }
           await this._db.addPair(missingPair);
           console.log(`Added missing pair for ${missingPair.name}`);
+          if (this._onMissingPairsFetched) {
+            this._onMissingPairsFetched(address, missingPair);
+          }
+          await this._notifyProgress();
           if (this._transactionDownloadCancelled) {
             return this._fetchUsd();
           }
@@ -256,6 +296,10 @@ export default class MeteoraDownloader {
           }
           await this._db.addToken(missingToken);
           console.log(`Added missing token ${missingToken.symbol}`);
+          if (this._onMissingTokensFetched) {
+            this._onMissingTokensFetched(address, missingToken);
+          }
+          await this._notifyProgress();
         }
         if (this._transactionDownloadCancelled) {
           return this._fetchUsd();
@@ -272,7 +316,7 @@ export default class MeteoraDownloader {
       this._connection = new Connection(this._config.endpoint, this._config);
     }
     const tokenData = await this._connection.getParsedAccountInfo(
-      new PublicKey(address),
+      new PublicKey(address)
     );
     if (
       tokenData.value &&
@@ -308,8 +352,15 @@ export default class MeteoraDownloader {
           await this._db.addUsdTransactions(address, usd);
           const elapsed = Math.round((Date.now() - this._startTime) / 1000);
           console.log(
-            `${elapsed}s - Added USD transactions for position ${address}`,
+            `${elapsed}s - Added USD transactions for position ${address}`
           );
+          if (this._onUsdTransactionsFetched) {
+            this._onUsdTransactionsFetched(
+              address,
+              usd.deposits.length + usd.withdrawals.length + usd.fees.length
+            );
+          }
+          await this._notifyProgress();
         }
         if (this._fullyCancelled) {
           return;
@@ -340,9 +391,15 @@ export default class MeteoraDownloader {
   cancel() {
     if (this._transactionDownloadCancelled) {
       this._fullyCancelled = true;
+      if (this._onCancelled) {
+        this._onCancelled(true);
+      }
     } else {
       this._transactionDownloadCancelled = true;
       this._stream.cancel();
+      if (this._onCancelled) {
+        this._onCancelled(false);
+      }
     }
   }
 }

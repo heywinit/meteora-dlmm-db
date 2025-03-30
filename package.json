@@ -1,5 +1,5 @@
 {
-  "name": "@geeklad/meteora-dlmm-db",
+  "name": "@heywinit/meteora-dlmm-db",
   "version": "2.2.1",
   "main": "dist/index.js",
   "module": "dist/index.js",
